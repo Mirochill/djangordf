@@ -1,7 +1,8 @@
-"""In-memory triple-store backend using rdflib's Dataset."""
+"""In-memory triple-store backend using rdflib's ConjunctiveGraph."""
+import warnings
 from typing import Iterable, Optional, Union
 
-from rdflib import Dataset, URIRef
+from rdflib import ConjunctiveGraph, URIRef
 from rdflib.graph import Graph
 from rdflib.query import Result
 
@@ -16,7 +17,16 @@ class InMemoryBackend(TripleStoreBackend):
     """
 
     def __init__(self) -> None:
-        self._store = Dataset(default_union=True)
+        # Dataset is not a drop-in replacement for SPARQL updates in rdflib 7.
+        # Preserve the existing default-graph semantics until that is resolved.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="ConjunctiveGraph is deprecated, use Dataset instead\\.",
+                category=DeprecationWarning,
+                module=r"djangordf\.backends\.memory",
+            )
+            self._store = ConjunctiveGraph()
 
     def query(self, sparql: str) -> Union[Result, Graph]:
         return self._store.query(sparql)
@@ -45,7 +55,5 @@ class InMemoryBackend(TripleStoreBackend):
 
     def _target(self, graph: Optional[URIRef]) -> Graph:
         if graph is None:
-            if hasattr(self._store, "default_graph"):
-                return self._store.default_graph
             return self._store.default_context
         return self._store.get_context(graph)

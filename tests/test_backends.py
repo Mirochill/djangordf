@@ -77,7 +77,35 @@ def test_in_memory_backend_constructs_without_rdflib_deprecation_warning():
         warnings.simplefilter("error", DeprecationWarning)
         backend = InMemoryBackend()
         backend.add([(EX_S, EX_P, Literal("v"))])
+        backend.update(
+            'INSERT DATA { <http://example.org/s> <http://example.org/p2> "w" }'
+        )
+        result = backend.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+        assert (EX_S, EX_P2, Literal("w")) in result
         backend.clear()
+
+
+def test_update_named_graph_preserves_default_without_deprecation_warning():
+    from djangordf.backends.memory import InMemoryBackend
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        backend = InMemoryBackend()
+        backend.update(
+            'INSERT DATA { <http://example.org/s> <http://example.org/p> "default" . '
+            'GRAPH <http://example.org/g> { '
+            '<http://example.org/s> <http://example.org/p> "named" } }'
+        )
+        named = backend.query(
+            "CONSTRUCT { ?s ?p ?o } WHERE { "
+            "GRAPH <http://example.org/g> { ?s ?p ?o } }"
+        )
+        assert (EX_S, EX_P, Literal("named")) in named
+        assert (EX_S, EX_P, Literal("default")) not in named
+        backend.update("DELETE WHERE { GRAPH <http://example.org/g> { ?s ?p ?o } }")
+        remaining = backend.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+        assert (EX_S, EX_P, Literal("default")) in remaining
+        assert (EX_S, EX_P, Literal("named")) not in remaining
 
 
 def test_add_then_construct_roundtrips_triples(backend):
